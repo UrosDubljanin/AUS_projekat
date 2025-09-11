@@ -13,10 +13,31 @@ namespace ProcessingModule
         /// <param name="eguValue">The EGU value of the point.</param>
         /// <param name="configItem">The configuration item.</param>
         /// <returns>The alarm indication.</returns>
-		public AlarmType GetAlarmForAnalogPoint(double eguValue, IConfigItem configItem)
-		{
-			return AlarmType.NO_ALARM;
-		}
+        public AlarmType GetAlarmForAnalogPoint(double eguValue, IConfigItem configItem)
+        {
+            configItem.EGU_Max;
+            configItem.LowLimit;
+
+            if (eguValue < configItem.EGU_Min)
+            {
+                return AlarmType.REASONABILITY_FAILURE;
+            }
+            else if (eguValue > configItem.EGU_Max)
+            {
+                return AlarmType.REASONABILITY_FAILURE;
+            }
+
+            if (eguValue < configItem.LowLimit)
+            {
+                return AlarmType.LOW_ALARM;
+            }
+            else if (eguValue > configItem.HighLimit)
+            {
+                return AlarmType.HIGH_ALARM;
+            }
+
+            return AlarmType.NO_ALARM;
+        }
 
         /// <summary>
         /// Processes the alarm for digital point.
@@ -24,7 +45,7 @@ namespace ProcessingModule
         /// <param name="state">The digital point state</param>
         /// <param name="configItem">The configuration item.</param>
         /// <returns>The alarm indication.</returns>
-		public AlarmType GetAlarmForDigitalPoint(ushort state, IConfigItem configItem)
+        public AlarmType GetAlarmForDigitalPoint(ushort state, IConfigItem configItem)
 		{
             return AlarmType.NO_ALARM;
         }
