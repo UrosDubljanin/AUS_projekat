@@ -1,8 +1,11 @@
-STA 1
-TCP 502
+STA 15
+TCP 25252
 
+# Digitalni izlazi
+DO_REG  1 2000  0  0  0  1  0  DO  @STOP   # # # # # # # # #
+DO_REG  1 2002  0  0  0  1  0  DO  @V1     # # # # # # # # #
+DO_REG  1 2005  0  0  0  1  0  DO  @P1     # # # # # # # # #
+DO_REG  1 2006  0  0  0  1  0  DO  @P2     # # # # # # # # #
 
-DO_REG  10 40   0  0      1     0  DO  @DigOut
-DI_REG  8 1000  0  0      1     0  DI  @DigIn
-IN_REG  4 2000  0  0   4095  2000  AI  @AnaIn
-HR_INT  2 3000  0  0   4095  1200  AO  @AnaOut
+# Analogni izlazi
+HR_INT  1 1000  0  0  0  12000 6500  AO  @L   # # # 12000 0 # 3.5 1.0 #
