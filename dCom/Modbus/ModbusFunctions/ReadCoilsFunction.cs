@@ -55,7 +55,7 @@ namespace Modbus.ModbusFunctions
         {
             ModbusReadCommandParameters paramCom = this.CommandParameters as ModbusReadCommandParameters;
 
-            Directory<Tuple<PointType, ushort>, ushort> d = new Dictionary<Tuple<PointType, ushort>, ushort>;
+            Dictionary<Tuple<PointType, ushort>, ushort> d = new Dictionary<Tuple<PointType, ushort>, ushort>;
 
             int q = response[8];
 
