@@ -2,6 +2,7 @@
 using Modbus.FunctionParameters;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Reflection;
 
@@ -24,15 +25,56 @@ namespace Modbus.ModbusFunctions
         /// <inheritdoc/>
         public override byte[] PackRequest()
         {
-            //TO DO: IMPLEMENT
-            throw new NotImplementedException();
+            ModbusReadCommandParameters paramCom = this.CommandParameters as ModbusReadCommandParameters;
+
+            byte[] request = new byte[12];
+
+            Buffer.BlockCopy((Array)BitConverter.GetBytes(
+                IPAddress.HostToNetworkOrder(short)paramCom.TransactionId)), 0, (Array)request, 0, 2);
+
+            Buffer.BlockCopy((Array)BitConverter.GetBytes(
+               IPAddress.HostToNetworkOrder(short)paramCom.ProtocolId)), 0, (Array)request, 2, 2);
+
+            Buffer.BlockCopy((Array)BitConverter.GetBytes(
+               IPAddress.HostToNetworkOrder(short)paramCom.Length)), 0, (Array)request, 4, 2);
+
+            request[6] = paramCom.UnitId;
+            request[7] = paramCom.FunctionCode;
+
+            Buffer.BlockCopy((Array)BitConverter.GetBytes(
+               IPAddress.HostToNetworkOrder(short)paramCom.StartAddress)), 0, (Array)request, 8, 2);
+
+            Buffer.BlockCopy((Array)BitConverter.GetBytes(
+               IPAddress.HostToNetworkOrder(short)paramCom.Quantity)), 0, (Array)request, 10, 2);
+
+            return request
         }
 
         /// <inheritdoc />
         public override Dictionary<Tuple<PointType, ushort>, ushort> ParseResponse(byte[] response)
         {
-            //TO DO: IMPLEMENT
-            throw new NotImplementedException();
+            ModbusReadCommandParameters paramCom = this.CommandParameters as ModbusReadCommandParameters;
+
+            Directory<Tuple<PointType, ushort>, ushort> d = new Dictionary<Tuple<PointType, ushort>, ushort>;
+
+            int q = response[8];
+
+            for(int i=0; i<8; i++)
+            {
+                for(int j=0; j<8; j++)
+                {
+                    if (paramCom.Quantity < (j + 1 * 8))
+                    {
+                        break;
+                    }
+
+                    ushort v = (ushort)(response[9 + i] & (byte)0x1);
+
+                    response[9 + i] /= 2;
+
+                    d.Add(new Touple<PointType.DIGITAL_OUTPUT>, (ushort)(paramCom.StartAddress+(j+i*8))), v)
+                }
+            }
         }
     }
 }
