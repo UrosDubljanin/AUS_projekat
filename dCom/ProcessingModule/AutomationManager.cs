@@ -81,9 +81,29 @@ namespace ProcessingModule
                     level.ConfigItem.Deviation,   //odstupanje (B)
                     level.RawValue                //sirova vrijednost iz registra
                 );
-
+                previousLevel = currentLevel;
                 //Uzimamo vrijednost iz RtuCfg.txt 10500L
                 int highAlarm = (int)level.ConfigItem.HighLimit;
+
+
+                if (p1.RawValue == 1 && p2.RawValue==1)
+                {
+                    previousLevel += 240;
+                }
+                else if (p1.RawValue == 1 && p2.RawValue==0)
+                {
+                    previousLevel += 160;
+                }else if(p1.RawValue ==0 && p2.RawValue == 1)
+                {
+                    previousLevel += 80;
+                }
+
+                if (v1.RawValue == 1 && previousLevel>=6000)
+                {
+                    previousLevel -= 50;
+                }
+                
+
 
                 // --- AUTOMATSKO PRAŽNJENJE (HighAlarm) ---
                 if (currentLevel >= highAlarm)
