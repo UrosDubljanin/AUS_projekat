@@ -134,6 +134,7 @@ namespace ProcessingModule
                 // --- Upis nivoa ako se promijenio ---
                 if (currentLevel != previousLevel)
                 {
+                    currentLevel = previousLevel;
                     //Radimo suprotno, da bi upisali u registar prebacujemo u RAW
                     int raw = (int)eGUConverter.ConvertToRaw(
                         level.ConfigItem.ScaleFactor,
