@@ -1,5 +1,5 @@
 STA 1
-TCP 502
+TCP 25252
 
 
 DO_REG  10 40   0  0      1     0  DO  @DigOut
