@@ -5,29 +5,29 @@ using System.Collections.Generic;
 namespace dCom.Configuration
 {
     internal class ConfigItem : IConfigItem
-	{
-		#region Fields
+    {
+        #region Fields
 
-		private PointType registryType;
-		private ushort numberOfRegisters;
-		private ushort startAddress;
-		private ushort decimalSeparatorPlace;
-		private ushort minValue;
-		private ushort maxValue;
-		private ushort defaultValue;
-		private string processingType;
-		private string description;
-		private int acquisitionInterval;
-		private double scalingFactor;
-		private double deviation;
-		private double egu_max;
-		private double egu_min;
-		private ushort abnormalValue;
-		private double highLimit;
-		private double lowLimit;
+        private PointType registryType;
+        private ushort numberOfRegisters;
+        private ushort startAddress;
+        private ushort decimalSeparatorPlace;
+        private ushort minValue;
+        private ushort maxValue;
+        private ushort defaultValue;
+        private string processingType;
+        private string description;
+        private int acquisitionInterval;
+        private double scalingFactor;
+        private double deviation;
+        private double egu_max;
+        private double egu_min;
+        private ushort abnormalValue;
+        private double highLimit;
+        private double lowLimit;
         private int secondsPassedSinceLastPoll;
 
-		#endregion Fields
+        #endregion Fields
 
 		#region Properties
 
@@ -170,7 +170,7 @@ namespace dCom.Configuration
 			set
 			{
 				scalingFactor = value;
-			} 
+			}
 		}
 
 		public double Deviation
@@ -251,44 +251,49 @@ namespace dCom.Configuration
 			}
 		}
 
-        public int SecondsPassedSinceLastPoll
-        {
-            get
-            {
-                return secondsPassedSinceLastPoll;
-            }
-
-            set
-            {
-                secondsPassedSinceLastPoll = value;
-            }
-        }
-
-        #endregion Properties
-
-        public ConfigItem(List<string> configurationParameters)
+		public int SecondsPassedSinceLastPoll
 		{
-			RegistryType = GetRegistryType(configurationParameters[0]);
-			int temp;
-			double doubleTemp;
-			Int32.TryParse(configurationParameters[1], out temp);
-			NumberOfRegisters = (ushort)temp;
-			Int32.TryParse(configurationParameters[2], out temp);
-			StartAddress = (ushort)temp;
-			Int32.TryParse(configurationParameters[3], out temp);
-			DecimalSeparatorPlace = (ushort)temp;
-			Int32.TryParse(configurationParameters[4], out temp);
-			MinValue = (ushort)temp;
-			Int32.TryParse(configurationParameters[5], out temp);
-			MaxValue = (ushort)temp;
-			Int32.TryParse(configurationParameters[6], out temp);
-			DefaultValue = (ushort)temp;
-			ProcessingType = configurationParameters[7];
-			Description = configurationParameters[8].TrimStart('@');
+			get
+			{
+				return secondsPassedSinceLastPoll;
+			}
+
+			set
+			{
+				secondsPassedSinceLastPoll = value;
+			}
+		}
+
+		#endregion Properties
+
+		public ConfigItem(List<string> configurationParameters)
+        {
+            RegistryType = GetRegistryType(configurationParameters[0]);
+
+            int temp;
+            Int32.TryParse(configurationParameters[1], out temp);
+            NumberOfRegisters = (ushort)temp;
+
+            Int32.TryParse(configurationParameters[2], out temp);
+            StartAddress = (ushort)temp;
+
+            Int32.TryParse(configurationParameters[3], out temp);
+            DecimalSeparatorPlace = (ushort)temp;
+
+            Int32.TryParse(configurationParameters[4], out temp);
+            MinValue = (ushort)temp;
+
+            Int32.TryParse(configurationParameters[5], out temp);
+            MaxValue = (ushort)temp;
+
+            Int32.TryParse(configurationParameters[6], out temp);
+            DefaultValue = (ushort)temp;
+
+            ProcessingType = configurationParameters[7];
+            Description = configurationParameters[8].TrimStart('@');
+
             if (configurationParameters[9].Equals("#"))
-            {
                 AcquisitionInterval = 1;
-            }
             else
             {
                 Int32.TryParse(configurationParameters[9], out temp);
@@ -296,9 +301,7 @@ namespace dCom.Configuration
             }
 
             if (configurationParameters[10].Equals("#"))
-            {
                 scalingFactor = 1;
-            }
             else
             {
                 Int32.TryParse(configurationParameters[10], out temp);
@@ -306,9 +309,7 @@ namespace dCom.Configuration
             }
 
             if (configurationParameters[11].Equals("#"))
-            {
                 deviation = 1;
-            }
             else
             {
                 Int32.TryParse(configurationParameters[11], out temp);
@@ -316,9 +317,7 @@ namespace dCom.Configuration
             }
 
             if (configurationParameters[12].Equals("#"))
-            {
                 egu_max = 1;
-            }
             else
             {
                 Int32.TryParse(configurationParameters[12], out temp);
@@ -326,9 +325,7 @@ namespace dCom.Configuration
             }
 
             if (configurationParameters[13].Equals("#"))
-            {
                 egu_min = 1;
-            }
             else
             {
                 Int32.TryParse(configurationParameters[13], out temp);
@@ -336,19 +333,15 @@ namespace dCom.Configuration
             }
 
             if (configurationParameters[14].Equals("#"))
-            {
                 abnormalValue = 1;
-            }
             else
             {
                 Int32.TryParse(configurationParameters[14], out temp);
-                abnormalValue = temp;
+                abnormalValue = (ushort)temp;
             }
 
             if (configurationParameters[15].Equals("#"))
-            {
                 highLimit = 1;
-            }
             else
             {
                 Int32.TryParse(configurationParameters[15], out temp);
@@ -356,9 +349,7 @@ namespace dCom.Configuration
             }
 
             if (configurationParameters[16].Equals("#"))
-            {
                 lowLimit = 1;
-            }
             else
             {
                 Int32.TryParse(configurationParameters[16], out temp);
@@ -366,45 +357,24 @@ namespace dCom.Configuration
             }
 
             if (configurationParameters[17].Equals("#"))
-            {
                 secondsPassedSinceLastPoll = 1;
-            }
             else
             {
                 Int32.TryParse(configurationParameters[17], out temp);
                 secondsPassedSinceLastPoll = temp;
             }
+        }
 
-
+        private PointType GetRegistryType(string registryTypeName)
+        {
+            switch (registryTypeName)
+            {
+                case "DO_REG": return PointType.DIGITAL_OUTPUT;
+                case "DI_REG": return PointType.DIGITAL_INPUT;
+                case "IN_REG": return PointType.ANALOG_INPUT;
+                case "HR_INT": return PointType.ANALOG_OUTPUT;
+                default:       return PointType.HR_LONG;
+            }
         }
     }
-
-		private PointType GetRegistryType(string registryTypeName)
-		{
-			PointType registryType;
-			switch (registryTypeName)
-			{
-				case "DO_REG":
-					registryType = PointType.DIGITAL_OUTPUT;
-					break;
-
-				case "DI_REG":
-					registryType = PointType.DIGITAL_INPUT;
-					break;
-
-				case "IN_REG":
-					registryType = PointType.ANALOG_INPUT;
-					break;
-
-				case "HR_INT":
-					registryType = PointType.ANALOG_OUTPUT;
-					break;
-
-				default:
-					registryType = PointType.HR_LONG;
-					break;
-			}
-			return registryType;
-		}
-	}
 }

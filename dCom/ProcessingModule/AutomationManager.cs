@@ -58,15 +58,95 @@ namespace ProcessingModule
 		}
 
 
-		private void AutomationWorker_DoWork()
-		{
-			//while (!disposedValue)
-			//{
-			//}
-		}
+        private void AutomationWorker_DoWork()
+        {
+            var config = configuration.GetConfigurationItems();
 
-		#region IDisposable Support
-		private bool disposedValue = false; // To detect redundant calls
+            IConfigItem stop = config.Find(x => x.Description == "STOP");
+            IConfigItem p1 = config.Find(x => x.Description == "P1");
+            IConfigItem p2 = config.Find(x => x.Description == "P2");
+            IConfigItem v1 = config.Find(x => x.Description == "V1");
+            IConfigItem level = config.Find(x => x.Description == "L");
+
+            int highAlarm = (int)level.HighLimit; // iz cfg fajla (npr. 10500 L)
+
+            while (!disposedValue)
+            {
+                automationTrigger.WaitOne();
+
+                int currentLevel = level.DefaultValue;
+
+                // --- AUTOMATSKO PRAŽNJENJE (HighAlarm) ---
+                if (currentLevel >= highAlarm)
+                {
+                    // STOP=1
+                    processingManager.ExecuteWriteCommand(stop,
+                                                          configuration.GetTransactionId(),
+                                                          configuration.UnitAddress,
+                                                          stop.StartAddress,
+                                                          1);
+
+                    // pumpa OFF
+                    processingManager.ExecuteWriteCommand(p1,
+                                                          configuration.GetTransactionId(),
+                                                          configuration.UnitAddress,
+                                                          p1.StartAddress,
+                                                          0);
+                    processingManager.ExecuteWriteCommand(p2,
+                                                          configuration.GetTransactionId(),
+                                                          configuration.UnitAddress,
+                                                          p2.StartAddress,
+                                                          0);
+
+                    // ventil ON
+                    processingManager.ExecuteWriteCommand(v1,
+                                                          configuration.GetTransactionId(),
+                                                          configuration.UnitAddress,
+                                                          v1.StartAddress,
+                                                          1);
+                }
+
+                // --- INTERLOCK LOGIKA ZA STOP ---
+                if (stop.DefaultValue == 1) // STOP=1
+                {
+                    // onemogući pumpu
+                    if (p1.DefaultValue != 0)
+                    {
+                        processingManager.ExecuteWriteCommand(p1,
+                                                              configuration.GetTransactionId(),
+                                                              configuration.UnitAddress,
+                                                              p1.StartAddress,
+                                                              0);
+                    }
+                    if (p2.DefaultValue != 0)
+                    {
+                        processingManager.ExecuteWriteCommand(p2,
+                                                              configuration.GetTransactionId(),
+                                                              configuration.UnitAddress,
+                                                              p2.StartAddress,
+                                                              0);
+                    }
+                }
+                else // STOP=0
+                {
+                    // onemogući ventil
+                    if (v1.DefaultValue != 0)
+                    {
+                        processingManager.ExecuteWriteCommand(v1,
+                                                              configuration.GetTransactionId(),
+                                                              configuration.UnitAddress,
+                                                              v1.StartAddress,
+                                                              0);
+                    }
+                }
+
+                Thread.Sleep(delayBetweenCommands); // kontrolisani ciklus
+            }
+        }
+
+
+        #region IDisposable Support
+        private bool disposedValue = false; // To detect redundant calls
 
 
         /// <summary>

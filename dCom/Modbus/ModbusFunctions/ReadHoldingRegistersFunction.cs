@@ -24,51 +24,42 @@ namespace Modbus.ModbusFunctions
         /// <inheritdoc />
         public override byte[] PackRequest()
         {
-            ModbusReadCommandParameters paramCom = this.CommandParameters as ModbusReadCommandParameters;
+            byte[] paket = new byte[12];
 
-            byte[] request = new byte[12];
+            Buffer.BlockCopy(BitConverter.GetBytes(IPAddress.HostToNetworkOrder((short)CommandParameters.TransactionId)), 0, paket, 0, 2);
+            Buffer.BlockCopy(BitConverter.GetBytes(IPAddress.HostToNetworkOrder((short)CommandParameters.ProtocolId)), 0, paket, 2, 2);
+            Buffer.BlockCopy(BitConverter.GetBytes(IPAddress.HostToNetworkOrder((short)CommandParameters.Length)), 0, paket, 4, 2);
+            paket[6] = CommandParameters.UnitId;
+            paket[7] = CommandParameters.FunctionCode;
+            Buffer.BlockCopy(BitConverter.GetBytes(IPAddress.HostToNetworkOrder((short)((ModbusReadCommandParameters)CommandParameters).StartAddress)), 0, paket, 8, 2);
+            Buffer.BlockCopy(BitConverter.GetBytes(IPAddress.HostToNetworkOrder((short)((ModbusReadCommandParameters)CommandParameters).Quantity)), 0, paket, 10, 2);
 
-            Buffer.BlockCopy((Array)BitConverter.GetBytes(
-                IPAddress.HostToNetworkOrder(short)paramCom.TransactionId)), 0, (Array)request, 0, 2);
-
-            Buffer.BlockCopy((Array)BitConverter.GetBytes(
-               IPAddress.HostToNetworkOrder(short)paramCom.ProtocolId)), 0, (Array)request, 2, 2);
-
-            Buffer.BlockCopy((Array)BitConverter.GetBytes(
-               IPAddress.HostToNetworkOrder(short)paramCom.Length)), 0, (Array)request, 4, 2);
-
-            request[6] = paramCom.UnitId;
-            request[7] = paramCom.FunctionCode;
-
-            Buffer.BlockCopy((Array)BitConverter.GetBytes(
-               IPAddress.HostToNetworkOrder(short)paramCom.StartAddress)), 0, (Array)request, 8, 2);
-
-            Buffer.BlockCopy((Array)BitConverter.GetBytes(
-               IPAddress.HostToNetworkOrder(short)paramCom.Quantity)), 0, (Array)request, 10, 2);
-
-            return request
+            return paket;
         }
 
         /// <inheritdoc />
         public override Dictionary<Tuple<PointType, ushort>, ushort> ParseResponse(byte[] response)
         {
-            ModbusReadCommandParameters paramCom = this.CommandParameters as ModbusReadCommandParameters;
-           
-            Dictionary<Tuple<PointType, ushort>, ushort> d=new Dictionary<Tuple<PointType, ushort>, ushort>();
+            var ret = new Dictionary<Tuple<PointType, ushort>, ushort>();
 
-            ushort address = ((ModbusReadCommandParameters)CommandParameters).StartAddress;
-
-            for(int i = 0; i < response[8]/2; i++)
+            if (response[7] == CommandParameters.FunctionCode + 0x80)   //provera da li je doslo do greske
             {
-                byte byte1 = response[8 + 1 + i * 2];
-                byte byte2 = response[8 + 2 + i * 2];
-                ushort value1 = BitConverter.ToUInt16(new byte[2] { byte2, byte1 }, 0);
-
-                d.Add(new Tuple<PointType, ushort>(PointType.ANALOG_OUTPUT, address), value1);
-                address++;
+                HandeException(response[8]);
+            }
+            else
+            {
+                ushort adresa = ((ModbusReadCommandParameters)CommandParameters).StartAddress;  //startna adresa
+                ushort value;   //ovde ce uvek biti vrednost
+                for (int i = 0; i < response[8]; i = i + 2) //response[8] -> byteCount tj. koliko imamo bajtova u delu koji nosi vrednosti signala
+                { //i se uvecava za dva jer preuzimamo short vrednosti
+                    value = BitConverter.ToUInt16(response, (i + 9));   //prva vrednost
+                    value = (ushort)IPAddress.NetworkToHostOrder((short)value); //prebacivanje u host order
+                    ret.Add(new Tuple<PointType, ushort>(PointType.ANALOG_OUTPUT, adresa), value); //cuvanje
+                    adresa++;
+                }
             }
 
-            return d;
+            return ret;
         }
     }
 }
