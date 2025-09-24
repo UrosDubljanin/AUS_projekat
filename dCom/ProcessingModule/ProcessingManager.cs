@@ -42,6 +42,24 @@ namespace ProcessingModule
         /// <inheritdoc />
         public void ExecuteWriteCommand(IConfigItem configItem, ushort transactionId, byte remoteUnitAddress, ushort pointAddress, int value)
         {
+            // --- Pravila iz teksta zadatka (STOP interlock za ručne komande) ---
+            if (configItem.Description == "V1")
+            {
+                // Ako je STOP=0, zabrani komandu za ventil
+                var stopPoint = storage.GetPoints(new List<PointIdentifier> { new PointIdentifier(PointType.DIGITAL_OUTPUT, 2000) })[0] as IDigitalPoint;
+                if (stopPoint.RawValue == 0)
+                    return;
+            }
+
+            if (configItem.Description == "P1" || configItem.Description == "P2")
+            {
+                // Ako je STOP=1, zabrani komandu za pumpe
+                var stopPoint = storage.GetPoints(new List<PointIdentifier> { new PointIdentifier(PointType.DIGITAL_OUTPUT, 2000) })[0] as IDigitalPoint;
+                if (stopPoint.RawValue == 1)
+                    return;
+            }
+
+            // --- Ostatak je kao kod kolege ---
             if (configItem.RegistryType == PointType.ANALOG_OUTPUT)
             {
                 ExecuteAnalogCommand(configItem, transactionId, remoteUnitAddress, pointAddress, value);
@@ -51,6 +69,7 @@ namespace ProcessingModule
                 ExecuteDigitalCommand(configItem, transactionId, remoteUnitAddress, pointAddress, value);
             }
         }
+
 
         /// <summary>
         /// Executes a digital write command.
@@ -109,7 +128,7 @@ namespace ProcessingModule
         private void CommandExecutor_UpdatePointEvent(PointType type, ushort pointAddress, ushort newValue)
         {
             List<IPoint> points = storage.GetPoints(new List<PointIdentifier>(1) { new PointIdentifier(type, pointAddress) });
-            
+
             if (type == PointType.ANALOG_INPUT || type == PointType.ANALOG_OUTPUT)
             {
                 ProcessAnalogPoint(points.First() as IAnalogPoint, newValue);
@@ -130,7 +149,7 @@ namespace ProcessingModule
             point.RawValue = newValue;
             point.Timestamp = DateTime.Now;
             point.State = (DState)newValue;
-
+            point.Alarm = alarmProcessor.GetAlarmForDigitalPoint((ushort)point.State, point.ConfigItem);
         }
 
         /// <summary>
@@ -142,6 +161,8 @@ namespace ProcessingModule
         {
             point.RawValue = newValue;
             point.Timestamp = DateTime.Now;
+            point.EguValue = eguConverter.ConvertToEGU(point.ConfigItem.ScaleFactor, point.ConfigItem.Deviation, (ushort)newValue);
+            point.Alarm = alarmProcessor.GetAlarmForAnalogPoint(point.EguValue, point.ConfigItem);
         }
 
         /// <inheritdoc />

@@ -1,190 +1,167 @@
 ﻿using Common;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 
 namespace ProcessingModule
 {
     /// <summary>
-    /// Class containing logic for automated work.
+    /// Class containing logic for automated work of the water tank
+    /// (STOP interlock, automatic drainage).
     /// </summary>
     public class AutomationManager : IAutomationManager, IDisposable
-	{
-		private Thread automationWorker;
+    {
+        private Thread automationWorker;
         private AutoResetEvent automationTrigger;
         private IStorage storage;
-		private IProcessingManager processingManager;
-		private int delayBetweenCommands;
+        private IProcessingManager processingManager;
+        private int delayBetweenCommands;
         private IConfiguration configuration;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AutomationManager"/> class.
-        /// </summary>
-        /// <param name="storage">The storage.</param>
-        /// <param name="processingManager">The processing manager.</param>
-        /// <param name="automationTrigger">The automation trigger.</param>
-        /// <param name="configuration">The configuration.</param>
+        private int previousLevel = -1;
+        private EGUConverter eGUConverter = new EGUConverter();
+
         public AutomationManager(IStorage storage, IProcessingManager processingManager, AutoResetEvent automationTrigger, IConfiguration configuration)
-		{
-			this.storage = storage;
-			this.processingManager = processingManager;
+        {
+            this.storage = storage;
+            this.processingManager = processingManager;
             this.configuration = configuration;
             this.automationTrigger = automationTrigger;
         }
 
-        /// <summary>
-        /// Initializes and starts the threads.
-        /// </summary>
-		private void InitializeAndStartThreads()
-		{
-			InitializeAutomationWorkerThread();
-			StartAutomationWorkerThread();
-		}
+        private void InitializeAndStartThreads()
+        {
+            InitializeAutomationWorkerThread();
+            StartAutomationWorkerThread();
+        }
 
-        /// <summary>
-        /// Initializes the automation worker thread.
-        /// </summary>
-		private void InitializeAutomationWorkerThread()
-		{
-			automationWorker = new Thread(AutomationWorker_DoWork);
-			automationWorker.Name = "Aumation Thread";
-		}
+        private void InitializeAutomationWorkerThread()
+        {
+            automationWorker = new Thread(AutomationWorker_DoWork);
+            automationWorker.Name = "Automation Thread";
+        }
 
-        /// <summary>
-        /// Starts the automation worker thread.
-        /// </summary>
-		private void StartAutomationWorkerThread()
-		{
-			automationWorker.Start();
-		}
-
+        private void StartAutomationWorkerThread()
+        {
+            automationWorker.Start();
+        }
 
         private void AutomationWorker_DoWork()
         {
-            var config = configuration.GetConfigurationItems();
-
-            IConfigItem stop = config.Find(x => x.Description == "STOP");
-            IConfigItem p1 = config.Find(x => x.Description == "P1");
-            IConfigItem p2 = config.Find(x => x.Description == "P2");
-            IConfigItem v1 = config.Find(x => x.Description == "V1");
-            IConfigItem level = config.Find(x => x.Description == "L");
-
-            int highAlarm = (int)level.HighLimit; // iz cfg fajla (npr. 10500 L)
+            // tačke definisane u RtuCfg.txt
+            List<PointIdentifier> pointList = new List<PointIdentifier>
+            {
+                //Tip tacke i adresa registra
+                new PointIdentifier(PointType.DIGITAL_OUTPUT, 2000), // STOP
+                new PointIdentifier(PointType.DIGITAL_OUTPUT, 2005), // P1
+                new PointIdentifier(PointType.DIGITAL_OUTPUT, 2006), // P2
+                new PointIdentifier(PointType.DIGITAL_OUTPUT, 2002), // V1
+                new PointIdentifier(PointType.ANALOG_OUTPUT, 1000)   // L (nivo)
+            };
 
             while (!disposedValue)
             {
                 automationTrigger.WaitOne();
 
-                int currentLevel = level.DefaultValue;
+                //Dobijamo trenutne vrijednosti svih tacaka gore definisanih
+                List<IPoint> points = storage.GetPoints(pointList);
+
+                //ovdje ih mapiramo
+                IDigitalPoint stop = points[0] as IDigitalPoint;
+                IDigitalPoint p1 = points[1] as IDigitalPoint;
+                IDigitalPoint p2 = points[2] as IDigitalPoint;
+                IDigitalPoint v1 = points[3] as IDigitalPoint;
+                IAnalogPoint level = points[4] as IAnalogPoint;
+
+                // nivo u EGU jedinicama
+                //Kada poredimo koristimo EGU vrijednosti
+                //Kada upisujemo nazad u registre vracamo iz EGU u Raw
+                int currentLevel = (int)eGUConverter.ConvertToEGU(
+                    level.ConfigItem.ScaleFactor, //faktor skaliranja (A)
+                    level.ConfigItem.Deviation,   //odstupanje (B)
+                    level.RawValue                //sirova vrijednost iz registra
+                );
+
+                //Uzimamo vrijednost iz RtuCfg.txt 10500L
+                int highAlarm = (int)level.ConfigItem.HighLimit;
 
                 // --- AUTOMATSKO PRAŽNJENJE (HighAlarm) ---
                 if (currentLevel >= highAlarm)
                 {
-                    // STOP=1
-                    processingManager.ExecuteWriteCommand(stop,
-                                                          configuration.GetTransactionId(),
-                                                          configuration.UnitAddress,
-                                                          stop.StartAddress,
-                                                          1);
-
-                    // pumpa OFF
-                    processingManager.ExecuteWriteCommand(p1,
-                                                          configuration.GetTransactionId(),
-                                                          configuration.UnitAddress,
-                                                          p1.StartAddress,
-                                                          0);
-                    processingManager.ExecuteWriteCommand(p2,
-                                                          configuration.GetTransactionId(),
-                                                          configuration.UnitAddress,
-                                                          p2.StartAddress,
-                                                          0);
-
-                    // ventil ON
-                    processingManager.ExecuteWriteCommand(v1,
-                                                          configuration.GetTransactionId(),
-                                                          configuration.UnitAddress,
-                                                          v1.StartAddress,
-                                                          1);
+                    //STO=1
+                    processingManager.ExecuteWriteCommand(stop.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, stop.ConfigItem.StartAddress, 1);
+                    //P1, P2->0
+                    processingManager.ExecuteWriteCommand(p1.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, p1.ConfigItem.StartAddress, 0);
+                    processingManager.ExecuteWriteCommand(p2.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, p2.ConfigItem.StartAddress, 0);
+                    processingManager.ExecuteWriteCommand(v1.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, v1.ConfigItem.StartAddress, 1);
                 }
 
                 // --- INTERLOCK LOGIKA ZA STOP ---
-                if (stop.DefaultValue == 1) // STOP=1
+                if (stop.RawValue == 1) // STOP=1 → pumpe OFF
                 {
-                    // onemogući pumpu
-                    if (p1.DefaultValue != 0)
-                    {
-                        processingManager.ExecuteWriteCommand(p1,
-                                                              configuration.GetTransactionId(),
-                                                              configuration.UnitAddress,
-                                                              p1.StartAddress,
-                                                              0);
-                    }
-                    if (p2.DefaultValue != 0)
-                    {
-                        processingManager.ExecuteWriteCommand(p2,
-                                                              configuration.GetTransactionId(),
-                                                              configuration.UnitAddress,
-                                                              p2.StartAddress,
-                                                              0);
-                    }
+                    if (p1.RawValue != 0)
+                        processingManager.ExecuteWriteCommand(p1.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, p1.ConfigItem.StartAddress, 0);
+
+                    if (p2.RawValue != 0)
+                        processingManager.ExecuteWriteCommand(p2.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, p2.ConfigItem.StartAddress, 0);
                 }
-                else // STOP=0
+                else // STOP=0 → ventil OFF
                 {
-                    // onemogući ventil
-                    if (v1.DefaultValue != 0)
-                    {
-                        processingManager.ExecuteWriteCommand(v1,
-                                                              configuration.GetTransactionId(),
-                                                              configuration.UnitAddress,
-                                                              v1.StartAddress,
-                                                              0);
-                    }
+                    if (v1.RawValue != 0)
+                        processingManager.ExecuteWriteCommand(v1.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, v1.ConfigItem.StartAddress, 0);
                 }
 
-                Thread.Sleep(delayBetweenCommands); // kontrolisani ciklus
+                // --- Upis nivoa ako se promijenio ---
+                if (currentLevel != previousLevel)
+                {
+                    //Radimo suprotno, da bi upisali u registar prebacujemo u RAW
+                    int raw = (int)eGUConverter.ConvertToRaw(
+                        level.ConfigItem.ScaleFactor,
+                        level.ConfigItem.Deviation,
+                        currentLevel
+                    );
+
+                    //Salje se nova vrijednost (u raw formatu) na adresi 1000
+                    processingManager.ExecuteWriteCommand(level.ConfigItem,
+                                                          configuration.GetTransactionId(),
+                                                          configuration.UnitAddress,
+                                                          level.ConfigItem.StartAddress,
+                                                          raw);
+
+                    previousLevel = currentLevel;
+                }
+
+                Thread.Sleep(delayBetweenCommands);
             }
         }
 
+        #region IDisposable
+        private bool disposedValue = false;
 
-        #region IDisposable Support
-        private bool disposedValue = false; // To detect redundant calls
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing) { }
+                disposedValue = true;
+            }
+        }
 
+        public void Dispose()
+        {
+            Dispose(true);
+        }
 
-        /// <summary>
-        /// Disposes the object.
-        /// </summary>
-        /// <param name="disposing">Indication if managed objects should be disposed.</param>
-		protected virtual void Dispose(bool disposing)
-		{
-			if (!disposedValue)
-			{
-				if (disposing)
-				{
-				}
-				disposedValue = true;
-			}
-		}
-
-
-		// This code added to correctly implement the disposable pattern.
-		public void Dispose()
-		{
-			// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
-			Dispose(true);
-			// GC.SuppressFinalize(this);
-		}
-
-        /// <inheritdoc />
         public void Start(int delayBetweenCommands)
-		{
-			this.delayBetweenCommands = delayBetweenCommands*1000;
+        {
+            this.delayBetweenCommands = delayBetweenCommands * 1000;
             InitializeAndStartThreads();
-		}
+        }
 
-        /// <inheritdoc />
         public void Stop()
-		{
-			Dispose();
-		}
-		#endregion
-	}
+        {
+            Dispose();
+        }
+        #endregion
+    }
 }

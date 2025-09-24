@@ -6,71 +6,75 @@ using System.Threading;
 namespace ProcessingModule
 {
     /// <summary>
-    /// Class containing logic for periodic polling.
+    /// Acquisitor: periodično čitanje tačaka i simulacija nivoa vode u rezervoaru.
     /// </summary>
     public class Acquisitor : IDisposable
-	{
-		private AutoResetEvent acquisitionTrigger;
+    {
+        private AutoResetEvent acquisitionTrigger;
         private IProcessingManager processingManager;
         private Thread acquisitionWorker;
-		private IStateUpdater stateUpdater;
-		private IConfiguration configuration;
+        private IStateUpdater stateUpdater;
+        private IConfiguration configuration;
+        private IStorage storage;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Acquisitor"/> class.
-        /// </summary>
-        /// <param name="acquisitionTrigger">The acquisition trigger.</param>
-        /// <param name="processingManager">The processing manager.</param>
-        /// <param name="stateUpdater">The state updater.</param>
-        /// <param name="configuration">The configuration.</param>
-		public Acquisitor(AutoResetEvent acquisitionTrigger, IProcessingManager processingManager, IStateUpdater stateUpdater, IConfiguration configuration)
-		{
-			this.stateUpdater = stateUpdater;
-			this.acquisitionTrigger = acquisitionTrigger;
-			this.processingManager = processingManager;
-			this.configuration = configuration;
-			this.InitializeAcquisitionThread();
-			this.StartAcquisitionThread();
-		}
+        private EGUConverter eGUConverter = new EGUConverter();
 
-		#region Private Methods
+        // konstante koje nisu u RtuCfg.txt
+        private const int inflowStep = 80;      // 80 l/s po pumpi
+        private const int outflow = 50;         // 50 l/s kad ventil otvori
+        private const int drainageLevel = 6000; // 2m = 6000 L
 
-        /// <summary>
-        /// Initializes the acquisition thread.
-        /// </summary>
-		private void InitializeAcquisitionThread()
-		{
-			this.acquisitionWorker = new Thread(Acquisition_DoWork);
-			this.acquisitionWorker.Name = "Acquisition thread";
-		}
+        private int previousLevel = -1;
 
-        /// <summary>
-        /// Starts the acquisition thread.
-        /// </summary>
-		private void StartAcquisitionThread()
-		{
-			acquisitionWorker.Start();
-		}
-
-        /// <summary>
-        /// Acquisitor thread logic.
-        /// </summary>
-		private void Acquisition_DoWork()
+        public Acquisitor(AutoResetEvent acquisitionTrigger,
+                          IProcessingManager processingManager,
+                          IStateUpdater stateUpdater,
+                          IConfiguration configuration,
+                          IStorage storage)
         {
-            List<IConfigItem> config = configuration.GetConfigurationItems();
+            this.stateUpdater = stateUpdater;
+            this.acquisitionTrigger = acquisitionTrigger;
+            this.processingManager = processingManager;
+            this.configuration = configuration;
+            this.storage = storage;
 
-            // konstante iz zadatka
-            int inflowStep = 80;     // 80 l/s po stepenu P1/P2
-            int outflow = 50;        // 50 l/s
-            int drainageLevel = 6000;
-            int maxLevel = 12000;
+            this.InitializeAcquisitionThread();
+            this.StartAcquisitionThread();
+        }
+
+        #region Private Methods
+
+        private void InitializeAcquisitionThread()
+        {
+            this.acquisitionWorker = new Thread(Acquisition_DoWork);
+            this.acquisitionWorker.Name = "Acquisition thread";
+        }
+
+        private void StartAcquisitionThread()
+        {
+            acquisitionWorker.Start();
+        }
+
+        private void Acquisition_DoWork()
+        {
+            List<IConfigItem> listaConfiga = configuration.GetConfigurationItems();
+
+            // identifikatori ključnih tačaka
+            List<PointIdentifier> pointList = new List<PointIdentifier>
+            {
+                new PointIdentifier(PointType.ANALOG_OUTPUT, 1000),  // L
+                new PointIdentifier(PointType.DIGITAL_OUTPUT, 2000), // STOP
+                new PointIdentifier(PointType.DIGITAL_OUTPUT, 2005), // P1
+                new PointIdentifier(PointType.DIGITAL_OUTPUT, 2006), // P2
+                new PointIdentifier(PointType.DIGITAL_OUTPUT, 2002)  // V1
+            };
 
             while (true)
             {
                 acquisitionTrigger.WaitOne();
 
-                // 1) standardno čitanje
-                foreach (IConfigItem item in config)
+                // 1) standardno periodično čitanje
+                foreach (IConfigItem item in listaConfiga)
                 {
                     item.SecondsPassedSinceLastPoll++;
                     if (item.SecondsPassedSinceLastPoll == item.AcquisitionInterval)
@@ -84,56 +88,67 @@ namespace ProcessingModule
                     }
                 }
 
-                // 2) simulacija promene nivoa L
-                // pronalazak config item-a za L, P1, P2, STOP, V1
-                IConfigItem level = config.Find(x => x.Description == "L");
-                IConfigItem stop = config.Find(x => x.Description == "STOP");
-                IConfigItem p1 = config.Find(x => x.Description == "P1");
-                IConfigItem p2 = config.Find(x => x.Description == "P2");
-                IConfigItem v1 = config.Find(x => x.Description == "V1");
+                // 2) simulacija promjene nivoa L
+                List<IPoint> points = storage.GetPoints(pointList);
 
-                if (level != null && stop != null && p1 != null && p2 != null && v1 != null)
+                IAnalogPoint level = points[0] as IAnalogPoint;
+                IDigitalPoint stop = points[1] as IDigitalPoint;
+                IDigitalPoint p1 = points[2] as IDigitalPoint;
+                IDigitalPoint p2 = points[3] as IDigitalPoint;
+                IDigitalPoint v1 = points[4] as IDigitalPoint;
+
+                int currentLevel = (int)eGUConverter.ConvertToEGU(
+                    level.ConfigItem.ScaleFactor,
+                    level.ConfigItem.Deviation,
+                    level.RawValue
+                );
+
+                int maxLevel = (int)level.ConfigItem.EGU_Max;
+
+                if (stop.RawValue == 0) // STOP=0 → pumpe rade
                 {
-                    int currentLevel = (int)level.DefaultValue; // trenutno stanje L (možeš koristiti storage ako imaš)
+                    int inflow = 0;
+                    if (p1.RawValue == 1 && p2.RawValue == 0) inflow = 2 * inflowStep;   // 160
+                    else if (p1.RawValue == 0 && p2.RawValue == 1) inflow = inflowStep;  // 80
+                    else if (p1.RawValue == 1 && p2.RawValue == 1) inflow = 3 * inflowStep; // 240
 
-                    if (stop.DefaultValue == 0) // STOP = 0 → pumpa radi
-                    {
-                        int inflow = 0;
-                        if (p1.DefaultValue == 1 && p2.DefaultValue == 0) inflow = 160;
-                        else if (p1.DefaultValue == 0 && p2.DefaultValue == 1) inflow = 80;
-                        else if (p1.DefaultValue == 1 && p2.DefaultValue == 1) inflow = 240;
+                    currentLevel += inflow;
+                }
+                else // STOP=1 → ventil može da radi
+                {
+                    if (v1.RawValue == 1 && currentLevel > drainageLevel)
+                        currentLevel -= outflow;
+                }
 
-                        currentLevel += inflow;
-                    }
-                    else // STOP = 1 → ventil može da radi
-                    {
-                        if (v1.DefaultValue == 1 && currentLevel > drainageLevel)
-                        {
-                            currentLevel -= outflow;
-                        }
-                    }
+                // granice
+                if (currentLevel < 0) currentLevel = 0;
+                if (currentLevel > maxLevel) currentLevel = maxLevel;
 
-                    // granice
-                    if (currentLevel < 0) currentLevel = 0;
-                    if (currentLevel > maxLevel) currentLevel = maxLevel;
+                // 3) upis nove vrijednosti samo ako se promijenila
+                if (currentLevel != previousLevel)
+                {
+                    int raw = (int)eGUConverter.ConvertToRaw(
+                        level.ConfigItem.ScaleFactor,
+                        level.ConfigItem.Deviation,
+                        currentLevel
+                    );
 
-                    // upis nove vrednosti u registar L (1000)
-                    processingManager.ExecuteWriteCommand(level,
+                    processingManager.ExecuteWriteCommand(level.ConfigItem,
                                                           configuration.GetTransactionId(),
                                                           configuration.UnitAddress,
-                                                          level.StartAddress,
-                                                          currentLevel);
+                                                          level.ConfigItem.StartAddress,
+                                                          raw);
+
+                    previousLevel = currentLevel;
                 }
             }
         }
 
-
         #endregion Private Methods
 
-        /// <inheritdoc />
         public void Dispose()
-		{
-			acquisitionWorker.Abort();
+        {
+            acquisitionWorker.Abort();
         }
-	}
+    }
 }
