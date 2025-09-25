@@ -106,14 +106,18 @@ namespace ProcessingModule
 
 
                 // --- AUTOMATSKO PRAŽNJENJE (HighAlarm) ---
-                if (currentLevel >= highAlarm)
+                if (previousLevel >= highAlarm)
                 {
                     //STO=1
-                    processingManager.ExecuteWriteCommand(stop.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, stop.ConfigItem.StartAddress, 1);
+                    if(stop.RawValue!=1)
+                        processingManager.ExecuteWriteCommand(stop.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, stop.ConfigItem.StartAddress, 1);
                     //P1, P2->0
-                    processingManager.ExecuteWriteCommand(p1.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, p1.ConfigItem.StartAddress, 0);
-                    processingManager.ExecuteWriteCommand(p2.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, p2.ConfigItem.StartAddress, 0);
-                    processingManager.ExecuteWriteCommand(v1.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, v1.ConfigItem.StartAddress, 1);
+                    if(p1.RawValue!=0)
+                        processingManager.ExecuteWriteCommand(p1.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, p1.ConfigItem.StartAddress, 0);
+                    if(p2.RawValue!=0)
+                        processingManager.ExecuteWriteCommand(p2.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, p2.ConfigItem.StartAddress, 0);
+                    if(v1.RawValue!=1)
+                        processingManager.ExecuteWriteCommand(v1.ConfigItem, configuration.GetTransactionId(), configuration.UnitAddress, v1.ConfigItem.StartAddress, 1);
                 }
 
                 // --- INTERLOCK LOGIKA ZA STOP ---
