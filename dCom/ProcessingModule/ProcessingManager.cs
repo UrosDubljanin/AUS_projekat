@@ -59,7 +59,6 @@ namespace ProcessingModule
                     return;
             }
 
-            // --- Ostatak je kao kod kolege ---
             if (configItem.RegistryType == PointType.ANALOG_OUTPUT)
             {
                 ExecuteAnalogCommand(configItem, transactionId, remoteUnitAddress, pointAddress, value);
